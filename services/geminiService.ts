@@ -21,13 +21,9 @@ const analysisSchema: Schema = {
 };
 
 export const analyzeFaceClientSide = async (base64Image: string): Promise<AnalysisResult> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("API Key is missing");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Use process.env.API_KEY directly as per guidelines.
+  // Assume it is pre-configured and valid.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const base64Data = base64Image.split(',')[1] || base64Image;
 
   const response = await ai.models.generateContent({
