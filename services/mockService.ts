@@ -1,6 +1,6 @@
 import { AnalysisResult } from "../types";
 
-export const analyzeFaceMock = async (base64Image: string): Promise<AnalysisResult> => {
+export const analyzeFaceMock = async (_base64Image: string): Promise<AnalysisResult> => {
   await new Promise(resolve => setTimeout(resolve, 2000));
   return {
     season: "Мягкое Лето",

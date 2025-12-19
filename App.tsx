@@ -5,7 +5,7 @@ import { AnalysisResult } from './types';
 
 // Mock function to simulate API call if backend isn't running in this specific view
 // In a real Vercel deployment, this would fetch from /api/analyze-face
-import { analyzeFaceMock } from './services/mockService'; 
+// import { analyzeFaceMock } from './services/mockService'; 
 
 export default function App() {
   const [loading, setLoading] = useState(false);
