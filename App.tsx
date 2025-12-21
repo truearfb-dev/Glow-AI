@@ -42,14 +42,28 @@ export default function App() {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze image');
+        let errorMsg = data.error || 'Failed to analyze image';
+        
+        // Translate common technical errors to user-friendly Russian
+        if (errorMsg.includes('Quota') || errorMsg.includes('quota') || errorMsg.includes('429')) {
+            errorMsg = 'Слишком много запросов. Пожалуйста, подождите минуту и попробуйте снова.';
+        } else if (errorMsg.includes('Service Error') || errorMsg.includes('Internal')) {
+            errorMsg = 'Сервис временно недоступен. Попробуйте позже.';
+        }
+        
+        throw new Error(errorMsg);
       }
       
       setResult(data as AnalysisResult);
 
     } catch (err: any) {
       console.error("Analysis failed:", err);
-      setError(err.message || "Не удалось проанализировать фото. Попробуйте еще раз.");
+      // Ensure we don't show [Object object] or huge JSON dumps
+      let displayError = "Не удалось проанализировать фото. Попробуйте еще раз.";
+      if (err.message && err.message.length < 200) {
+        displayError = err.message;
+      }
+      setError(displayError);
     } finally {
       setLoading(false);
     }
@@ -133,8 +147,8 @@ export default function App() {
 
         {error && (
           <div className="bg-red-50 text-red-600 p-4 rounded-xl text-center text-sm border border-red-100 flex items-center justify-center gap-2">
-            <Info className="w-4 h-4" />
-            {error}
+            <Info className="w-4 h-4 min-w-4" />
+            <span>{error}</span>
           </div>
         )}
 

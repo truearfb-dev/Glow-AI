@@ -66,8 +66,10 @@ export default async function handler(req: any, res: any) {
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Using gemini-2.5-flash-image which is optimized for general image tasks
-    const modelId = "gemini-2.5-flash-image";
+    // Switching to Gemini 3 Flash Preview.
+    // It is robust, multimodal (supports images), and hosted in US regions.
+    // This helps avoid "limit: 0" errors often found in older preview tags or specific region-locked models.
+    const modelId = "gemini-3-flash-preview";
 
     const response = await ai.models.generateContent({
       model: modelId,
@@ -104,7 +106,6 @@ export default async function handler(req: any, res: any) {
     try {
         jsonResponse = JSON.parse(text);
     } catch (e) {
-        // Fallback or retry logic could go here, but for now we error out or return raw text if structure fails
         throw new Error("Invalid JSON response from model");
     }
 
@@ -112,6 +113,19 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error:", error);
-    res.status(500).json({ error: "Internal Server Error: " + error.message });
+    
+    // Sanitize error message for the client
+    let errorMessage = "Internal Server Error";
+    
+    if (error.message) {
+        if (error.message.includes("quota") || error.message.includes("429")) {
+            errorMessage = "AI Quota Exceeded";
+        } else {
+            // Avoid sending huge stack traces or raw JSON dumps
+            errorMessage = error.message.length > 100 ? "AI Service Error" : error.message;
+        }
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 }
