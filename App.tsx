@@ -45,10 +45,14 @@ export default function App() {
         let errorMsg = data.error || 'Failed to analyze image';
         
         // Translate common technical errors to user-friendly Russian
-        if (errorMsg.includes('Quota') || errorMsg.includes('quota') || errorMsg.includes('429')) {
-            errorMsg = 'Слишком много запросов. Пожалуйста, подождите минуту и попробуйте снова.';
-        } else if (errorMsg.includes('Service Error') || errorMsg.includes('Internal')) {
-            errorMsg = 'Сервис временно недоступен. Попробуйте позже.';
+        if (typeof errorMsg === 'string') {
+             if (errorMsg.includes('Quota') || errorMsg.includes('quota') || errorMsg.includes('429')) {
+                errorMsg = 'Высокая нагрузка на сервис. Пожалуйста, подождите минуту.';
+            } else if (errorMsg.includes('Service Error') || errorMsg.includes('Internal')) {
+                errorMsg = 'Сервис временно недоступен. Попробуйте позже.';
+            }
+        } else {
+            errorMsg = 'Произошла ошибка при обработке.';
         }
         
         throw new Error(errorMsg);
@@ -58,10 +62,16 @@ export default function App() {
 
     } catch (err: any) {
       console.error("Analysis failed:", err);
-      // Ensure we don't show [Object object] or huge JSON dumps
+      // Ensure we don't show huge raw errors in the UI
       let displayError = "Не удалось проанализировать фото. Попробуйте еще раз.";
-      if (err.message && err.message.length < 200) {
-        displayError = err.message;
+      
+      if (err.message) {
+         // If error is unreasonably long (like a stack trace or JSON dump), show generic message
+         if (err.message.length > 100) {
+             displayError = "Ошибка сервера. Попробуйте позже.";
+         } else {
+             displayError = err.message;
+         }
       }
       setError(displayError);
     } finally {
@@ -146,9 +156,12 @@ export default function App() {
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-xl text-center text-sm border border-red-100 flex items-center justify-center gap-2">
-            <Info className="w-4 h-4 min-w-4" />
-            <span>{error}</span>
+          <div className="bg-red-50 text-red-600 p-4 rounded-xl text-center text-sm border border-red-100 flex flex-col items-center justify-center gap-2 animate-fade-in mx-4">
+            <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 min-w-4" />
+                <span className="font-medium">Ошибка</span>
+            </div>
+            <span className="opacity-90 break-words w-full px-2">{error}</span>
           </div>
         )}
 
