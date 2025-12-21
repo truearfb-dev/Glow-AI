@@ -21,6 +21,15 @@
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
       }
+      /* Анимация тряски для привлечения внимания при ошибке */
+      @keyframes shake {
+        0%, 100% { transform: translateX(0) scale(1); }
+        25% { transform: translateX(-5px) scale(1); }
+        75% { transform: translateX(5px) scale(1); }
+      }
+      .shake-animation {
+        animation: shake 0.4s ease-in-out;
+      }
     </style>
   <script type="importmap">
 {
@@ -74,6 +83,11 @@
             Проверить подписку
           </button>
         </div>
+
+        <!-- Сюда будем выводить ошибку -->
+        <p id="check-status" class="text-rose-500 text-sm mt-4 font-medium opacity-0 transition-opacity duration-300 transform translate-y-1">
+          <!-- Текст ошибки -->
+        </p>
       </div>
     </div>
 
@@ -89,6 +103,7 @@
         const modalCard = document.getElementById('modal-card');
         const btnSubscribe = document.getElementById('btn-subscribe');
         const btnCheck = document.getElementById('btn-check');
+        const statusText = document.getElementById('check-status');
 
         // Initialize Telegram WebApp
         const tg = window.Telegram?.WebApp;
@@ -119,11 +134,23 @@
           }, 500);
         };
 
+        // Helper to show error
+        const showStatusError = (message) => {
+          statusText.innerText = message;
+          statusText.classList.remove('opacity-0', 'translate-y-1');
+          
+          // Запуск анимации тряски (сброс класса для повторного запуска)
+          modalCard.classList.remove('shake-animation');
+          void modalCard.offsetWidth; // trigger reflow
+          modalCard.classList.add('shake-animation');
+        };
+
         const checkSubscription = async () => {
+          // Сброс статуса ошибки перед проверкой
+          statusText.classList.add('opacity-0', 'translate-y-1');
+
           if (!userId) {
             console.warn("No Telegram User ID found. Showing modal for testing.");
-            // Если нет ID пользователя (открыто в браузере), блокируем для безопасности.
-            // Для разработки можно временно закомментировать строку ниже.
             showModal();
             return;
           }
@@ -142,11 +169,12 @@
               hideModal();
             } else {
               showModal();
+              showStatusError("Мы не нашли вашу подписку. Попробуйте снова!");
             }
           } catch (e) {
             console.error("Check failed", e);
-            // При ошибке (нет интернета и т.д.) показываем модальное окно
             showModal();
+            showStatusError("Ошибка соединения. Проверьте интернет.");
           } finally {
             btnCheck.innerText = originalBtnText;
             btnCheck.disabled = false;
