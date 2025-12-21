@@ -14,14 +14,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { user_id } = req.query;
+  const { user_id, channel_id } = req.query;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const channelId = process.env.TELEGRAM_CHANNEL_ID;
+  
+  // Use channel_id from query if provided, otherwise fallback to env variable
+  const targetChannelId = channel_id || process.env.TELEGRAM_CHANNEL_ID;
 
-  if (!botToken || !channelId) {
-    console.error('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL_ID');
-    // Если конфигурация отсутствует, возвращаем ошибку, но можно и true для тестов.
-    // Сейчас безопаснее вернуть false.
+  if (!botToken || !targetChannelId) {
+    console.error('Missing TELEGRAM_BOT_TOKEN or Channel ID');
+    // Если конфигурация отсутствует, возвращаем ошибку.
     return res.status(200).json({ subscribed: false, error: 'Server configuration missing' });
   }
 
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${channelId}&user_id=${user_id}`;
+    const url = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${targetChannelId}&user_id=${user_id}`;
     const telegramRes = await fetch(url);
     const data = await telegramRes.json();
 

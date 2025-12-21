@@ -81,8 +81,8 @@
 
     <script>
       // Configuration
-      // ВАЖНО: Замените ссылку ниже на ссылку вашего канала
-      const TELEGRAM_CHANNEL_LINK = "https://t.me/GlowAI_App"; 
+      const TELEGRAM_CHANNEL_LINK = "https://t.me/groupaifaily"; 
+      const TELEGRAM_CHANNEL_ID = "-1003657083355";
 
       window.addEventListener('load', async () => {
         const modal = document.getElementById('subscription-modal');
@@ -134,7 +134,8 @@
           btnCheck.disabled = true;
 
           try {
-            const res = await fetch(`/api/check-subscription?user_id=${userId}`);
+            // Передаем также channel_id, чтобы API знало, какой канал проверять
+            const res = await fetch(`/api/check-subscription?user_id=${userId}&channel_id=${TELEGRAM_CHANNEL_ID}`);
             const data = await res.json();
 
             if (data.subscribed) {
