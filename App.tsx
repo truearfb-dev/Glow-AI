@@ -3,10 +3,6 @@ import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info } from 'lucide-
 import { ResultCard } from './components/ResultCard';
 import { AnalysisResult } from './types';
 
-// Mock function to simulate API call if backend isn't running in this specific view
-// In a real Vercel deployment, this would fetch from /api/analyze-face
-// import { analyzeFaceMock } from './services/mockService'; 
-
 export default function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -33,51 +29,28 @@ export default function App() {
 
   const processImage = async (base64Image: string) => {
     setLoading(true);
+    setError(null);
+    
     try {
-      // In a real Vercel environment, un-comment the fetch below:
-      /*
+      // Sending request to Vercel Serverless Function
       const response = await fetch('/api/analyze-face', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64Image }),
       });
       
-      if (!response.ok) throw new Error('Failed to analyze image');
-      const data: AnalysisResult = await response.json();
-      */
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to analyze image');
+      }
+      
+      setResult(data as AnalysisResult);
 
-      // For this demo (since we can't deploy the backend API here), we use a direct service call 
-      // or a mock if API_KEY is missing. 
-      // We will attempt to use the backend logic structure via a client-side wrapper 
-      // ensuring the logic matches the user request.
-      
-      // To satisfy the user prompt's architecture request, we assume the fetch to /api/analyze-face
-      // is how it works. However, to make this code functional in a standalone React preview without
-      // a Node backend, I will implement the logic via a direct call here using the logic 
-      // intended for api/analyze-face.ts.
-      
-      // See services/geminiService.ts for the actual implementation that mimics the backend api.
-      
-      // Simulating network delay for effect
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // NOTE: In a real Vercel app, this logic lives in api/analyze-face.ts
-      // Here we call the client-side equivalent for demonstration.
-      import('./services/geminiService').then(async ({ analyzeFaceClientSide }) => {
-         try {
-             const data = await analyzeFaceClientSide(base64Image);
-             setResult(data);
-         } catch (err) {
-             console.error(err);
-             setError("Не удалось проанализировать фото. Попробуйте еще раз.");
-         } finally {
-             setLoading(false);
-         }
-      });
-
-    } catch (err) {
-      console.error(err);
-      setError("Произошла ошибка при обработке.");
+    } catch (err: any) {
+      console.error("Analysis failed:", err);
+      setError(err.message || "Не удалось проанализировать фото. Попробуйте еще раз.");
+    } finally {
       setLoading(false);
     }
   };

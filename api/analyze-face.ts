@@ -33,15 +33,32 @@ const analysisSchema: Schema = {
   required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
 };
 
-/**
- * Server-side function logic (intended for Vercel /api/analyze-face)
- */
-export async function POST(request: Request) {
+export default async function handler(req: any, res: any) {
+  // Config CORS
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' });
+    return;
+  }
+
   try {
-    const { image } = await request.json();
+    const { image } = req.body;
 
     if (!image) {
-      return new Response(JSON.stringify({ error: "No image provided" }), { status: 400 });
+      res.status(400).json({ error: "No image provided" });
+      return;
     }
 
     // Extract base64 data (remove header if present)
@@ -49,8 +66,8 @@ export async function POST(request: Request) {
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Using gemini-3-flash-preview for multimodal tasks
-    const modelId = "gemini-3-flash-preview"; 
+    // Using gemini-2.5-flash-image which is optimized for general image tasks
+    const modelId = "gemini-2.5-flash-image";
 
     const response = await ai.models.generateContent({
       model: modelId,
@@ -68,7 +85,7 @@ export async function POST(request: Request) {
             2. Подбери 3 идеальных цвета одежды и 1 цвет, который старит.
             3. Дай 1 простое упражнение фейс-фитнеса (Face Yoga), подходящее для этого типа лица.
             
-            Верни ответ строго на русском языке.`
+            Верни ответ строго на русском языке в формате JSON.`
           },
         ],
       },
@@ -82,12 +99,19 @@ export async function POST(request: Request) {
     const text = response.text;
     if (!text) throw new Error("No response from AI");
 
-    return new Response(text, {
-      headers: { "Content-Type": "application/json" },
-    });
+    // Try to parse the text as JSON to ensure it's valid before sending
+    let jsonResponse;
+    try {
+        jsonResponse = JSON.parse(text);
+    } catch (e) {
+        // Fallback or retry logic could go here, but for now we error out or return raw text if structure fails
+        throw new Error("Invalid JSON response from model");
+    }
 
-  } catch (error) {
+    res.status(200).json(jsonResponse);
+
+  } catch (error: any) {
     console.error("API Error:", error);
-    return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
+    res.status(500).json({ error: "Internal Server Error: " + error.message });
   }
 }
