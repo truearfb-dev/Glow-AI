@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info } from 'lucide-react';
+import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info, ChevronDown } from 'lucide-react';
 import { ResultCard } from './components/ResultCard';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { AnalysisResult } from './types';
@@ -16,6 +16,7 @@ export default function App() {
   const [subCheckError, setSubCheckError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   // Configuration
   const TELEGRAM_CHANNEL_ID = "-1003657083355";
@@ -31,6 +32,16 @@ export default function App() {
 
     checkSubscription(true);
   }, []);
+
+  // Auto-scroll to results when ready and subscribed
+  useEffect(() => {
+    if (result && isSubscribed && !loading && resultsRef.current) {
+        // Small delay to ensure layout rendering
+        setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+    }
+  }, [result, isSubscribed, loading]);
 
   const checkSubscription = async (silent = false) => {
     // @ts-ignore
@@ -182,9 +193,25 @@ export default function App() {
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-                <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-full shadow-lg">
-                  <Camera className="w-5 h-5 text-stone-700" />
-                </div>
+                
+                {/* Camera Icon - Only show when NOT showing the scroll hint to avoid clutter */}
+                {!(result && isSubscribed) && (
+                    <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-full shadow-lg">
+                    <Camera className="w-5 h-5 text-stone-700" />
+                    </div>
+                )}
+                
+                {/* Scroll Hint Overlay */}
+                {result && isSubscribed && (
+                    <div className="absolute inset-x-0 bottom-0 pb-6 pt-12 bg-gradient-to-t from-black/50 to-transparent flex justify-center items-end pointer-events-none animate-fade-in">
+                        <div className="flex flex-col items-center gap-2 animate-bounce">
+                            <span className="text-white font-medium text-sm shadow-black drop-shadow-md">Результат ниже</span>
+                            <div className="bg-white/20 backdrop-blur-md p-2 rounded-full">
+                                <ChevronDown className="w-6 h-6 text-white" />
+                            </div>
+                        </div>
+                    </div>
+                )}
               </>
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-rose-400">
@@ -221,7 +248,10 @@ export default function App() {
 
         {/* Results Section */}
         {result && !loading && (
-          <div className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}>
+          <div 
+            ref={resultsRef} 
+            className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}
+          >
                 
             {/* Color Analysis Card */}
             <ResultCard 
@@ -289,6 +319,8 @@ export default function App() {
                 setImagePreview(null);
                 setError(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
+                // Scroll back to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
             >
