@@ -21,8 +21,8 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onCheck, i
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border border-rose-200 animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border border-rose-200">
         
         <div className="flex justify-center mb-6">
           <div className="bg-rose-100 p-4 rounded-full relative">
@@ -32,7 +32,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onCheck, i
             </svg>
             <div className="absolute -top-1 -right-1">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fb7185" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"/>
               </svg>
             </div>
           </div>

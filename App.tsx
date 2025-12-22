@@ -149,9 +149,7 @@ export default function App() {
       {/* Main Content */}
       <main className="w-full max-w-md space-y-8 relative">
         
-        {/* Upload Section - Hide if we have a result (blurred or not) to save space, or keep it? 
-            Let's keep it but maybe minimize it or just keep the functionality. 
-            Actually, if result exists, we usually scroll to it. */}
+        {/* Upload Section */}
         <div className="relative group">
           <input
             type="file"
@@ -166,7 +164,7 @@ export default function App() {
             className={`
               relative overflow-hidden rounded-3xl aspect-[3/4] shadow-xl transition-all duration-300 cursor-pointer
               ${!imagePreview ? 'bg-white border-2 border-dashed border-rose-300 hover:border-rose-400' : ''}
-              ${result && !isSubscribed ? 'blur-sm pointer-events-none' : ''} 
+              ${result && !isSubscribed ? 'blur-md pointer-events-none' : ''} 
             `}
           >
             {imagePreview ? (
@@ -216,93 +214,91 @@ export default function App() {
 
         {/* Results Section */}
         {result && !loading && (
-          <div className="relative">
-             {/* If not subscribed, blur the content and disable pointer events */}
-             <div className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}>
+          <div className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}>
                 
-                {/* Color Analysis Card */}
-                <ResultCard 
-                  title="Твой Цветотип" 
-                  icon={<Palette className="w-5 h-5" />}
-                  delay={100}
-                >
-                  <div className="mb-4">
-                    <span className="block text-2xl font-serif text-rose-900 mb-2">{result.season}</span>
-                    <p className="text-stone-600 text-sm leading-relaxed">{result.description}</p>
+            {/* Color Analysis Card */}
+            <ResultCard 
+              title="Твой Цветотип" 
+              icon={<Palette className="w-5 h-5" />}
+              delay={100}
+            >
+              <div className="mb-4">
+                <span className="block text-2xl font-serif text-rose-900 mb-2">{result.season}</span>
+                <p className="text-stone-600 text-sm leading-relaxed">{result.description}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
+                  <div className="flex gap-3 mt-2">
+                    {result.bestColors.map((color, idx) => (
+                      <div key={idx} className="flex flex-col items-center gap-1 group">
+                        <div 
+                          className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="text-[10px] text-stone-400 font-mono">{color}</span>
+                      </div>
+                    ))}
                   </div>
+                </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
-                      <div className="flex gap-3 mt-2">
-                        {result.bestColors.map((color, idx) => (
-                          <div key={idx} className="flex flex-col items-center gap-1 group">
-                            <div 
-                              className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
-                              style={{ backgroundColor: color }}
-                            />
-                            <span className="text-[10px] text-stone-400 font-mono">{color}</span>
-                          </div>
-                        ))}
+                <div>
+                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Лучше избегать</span>
+                  <div className="flex gap-3 mt-2">
+                    <div className="flex flex-col items-center gap-1 group">
+                      <div 
+                        className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
+                        style={{ backgroundColor: result.worstColor }}
+                      >
+                         <div className="absolute inset-0 flex items-center justify-center">
+                           <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
+                         </div>
                       </div>
-                    </div>
-
-                    <div>
-                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Лучше избегать</span>
-                      <div className="flex gap-3 mt-2">
-                        <div className="flex flex-col items-center gap-1 group">
-                          <div 
-                            className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
-                            style={{ backgroundColor: result.worstColor }}
-                          >
-                             <div className="absolute inset-0 flex items-center justify-center">
-                               <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
-                             </div>
-                          </div>
-                          <span className="text-[10px] text-stone-400 font-mono">{result.worstColor}</span>
-                        </div>
-                      </div>
+                      <span className="text-[10px] text-stone-400 font-mono">{result.worstColor}</span>
                     </div>
                   </div>
-                </ResultCard>
+                </div>
+              </div>
+            </ResultCard>
 
-                {/* Face Yoga Card */}
-                <ResultCard 
-                  title="Face Yoga на сегодня" 
-                  icon={<Smile className="w-5 h-5" />}
-                  delay={300}
-                >
-                  <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
-                    <h4 className="font-serif text-lg text-stone-800 mb-2">{result.yogaTitle}</h4>
-                    <p className="text-stone-600 text-sm leading-relaxed">
-                      {result.yogaText}
-                    </p>
-                  </div>
-                </ResultCard>
+            {/* Face Yoga Card */}
+            <ResultCard 
+              title="Face Yoga на сегодня" 
+              icon={<Smile className="w-5 h-5" />}
+              delay={300}
+            >
+              <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
+                <h4 className="font-serif text-lg text-stone-800 mb-2">{result.yogaTitle}</h4>
+                <p className="text-stone-600 text-sm leading-relaxed">
+                  {result.yogaText}
+                </p>
+              </div>
+            </ResultCard>
 
-                <button 
-                  onClick={() => {
-                    setResult(null);
-                    setImagePreview(null);
-                    setError(null);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
-                >
-                  Загрузить другое фото
-                </button>
-             </div>
-
-             {/* Subscription Modal Overlay */}
-             {!isSubscribed && (
-                 <SubscriptionModal 
-                    onCheck={() => checkSubscription(false)} 
-                    isChecking={isCheckingSub} 
-                    checkError={subCheckError} 
-                 />
-             )}
+            <button 
+              onClick={() => {
+                setResult(null);
+                setImagePreview(null);
+                setError(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+              className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
+            >
+              Загрузить другое фото
+            </button>
           </div>
         )}
+
+        {/* Subscription Modal Overlay - Moved out to be on top of everything */}
+        {result && !loading && !isSubscribed && (
+             <SubscriptionModal 
+                onCheck={() => checkSubscription(false)} 
+                isChecking={isCheckingSub} 
+                checkError={subCheckError} 
+             />
+        )}
+
       </main>
     </div>
   );
