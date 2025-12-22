@@ -20,8 +20,15 @@ export default function App() {
   // Configuration
   const TELEGRAM_CHANNEL_ID = "-1003657083355";
 
-  // Silent check on load (so returning users don't see the gate)
+  // Init Telegram WebApp and Silent check on load
   useEffect(() => {
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+        tg.ready();
+        tg.expand(); // Force full screen mode
+    }
+
     checkSubscription(true);
   }, []);
 
