@@ -36,10 +36,15 @@ export default function App() {
   // Auto-scroll to results when ready and subscribed
   useEffect(() => {
     if (result && isSubscribed && !loading && resultsRef.current) {
-        // Small delay to ensure layout rendering
-        setTimeout(() => {
+        // Ensure we start at the top so the user sees the photo + arrow
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Delay the scroll significantly so user sees the "Result below" hint
+        const timer = setTimeout(() => {
             resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 300);
+        }, 2000); 
+
+        return () => clearTimeout(timer);
     }
   }, [result, isSubscribed, loading]);
 
