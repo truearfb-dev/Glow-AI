@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info } from 'lucide-react';
 import { ResultCard } from './components/ResultCard';
+import { SubscriptionModal } from './components/SubscriptionModal';
 import { AnalysisResult } from './types';
 
 export default function App() {
@@ -8,7 +9,56 @@ export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Subscription State
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isCheckingSub, setIsCheckingSub] = useState(false);
+  const [subCheckError, setSubCheckError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Configuration
+  const TELEGRAM_CHANNEL_ID = "-1003657083355";
+
+  // Silent check on load (so returning users don't see the gate)
+  useEffect(() => {
+    checkSubscription(true);
+  }, []);
+
+  const checkSubscription = async (silent = false) => {
+    // @ts-ignore
+    const tg = window.Telegram?.WebApp;
+    const userId = tg?.initDataUnsafe?.user?.id;
+
+    if (!userId) {
+      if (!silent) setSubCheckError("Не удалось определить ID пользователя Telegram.");
+      return;
+    }
+
+    if (!silent) {
+        setIsCheckingSub(true);
+        setSubCheckError(null);
+    }
+
+    try {
+      const res = await fetch(`/api/check-subscription?user_id=${userId}&channel_id=${TELEGRAM_CHANNEL_ID}`);
+      const data = await res.json();
+
+      if (data.subscribed) {
+        setIsSubscribed(true);
+      } else {
+        setIsSubscribed(false);
+        if (!silent) {
+            setSubCheckError("Мы не нашли подписку. Пожалуйста, подпишитесь и попробуйте снова.");
+        }
+      }
+    } catch (e) {
+      console.error("Subscription check failed", e);
+      if (!silent) setSubCheckError("Ошибка соединения.");
+    } finally {
+      if (!silent) setIsCheckingSub(false);
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -16,6 +66,7 @@ export default function App() {
 
     setError(null);
     setResult(null);
+    // Don't reset isSubscribed here, we want to remember if they passed the gate
 
     // Create preview
     const reader = new FileReader();
@@ -43,8 +94,6 @@ export default function App() {
       
       if (!response.ok) {
         let errorMsg = data.error || 'Failed to analyze image';
-        
-        // Translate common technical errors to user-friendly Russian
         if (typeof errorMsg === 'string') {
              if (errorMsg.includes('Quota') || errorMsg.includes('quota') || errorMsg.includes('429')) {
                 errorMsg = 'Высокая нагрузка на сервис. Пожалуйста, подождите минуту.';
@@ -54,7 +103,6 @@ export default function App() {
         } else {
             errorMsg = 'Произошла ошибка при обработке.';
         }
-        
         throw new Error(errorMsg);
       }
       
@@ -62,11 +110,9 @@ export default function App() {
 
     } catch (err: any) {
       console.error("Analysis failed:", err);
-      // Ensure we don't show huge raw errors in the UI
       let displayError = "Не удалось проанализировать фото. Попробуйте еще раз.";
       
       if (err.message) {
-         // If error is unreasonably long (like a stack trace or JSON dump), show generic message
          if (err.message.length > 100) {
              displayError = "Ошибка сервера. Попробуйте позже.";
          } else {
@@ -84,7 +130,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen pb-12 px-4 flex flex-col items-center">
+    <div className="min-h-screen pb-12 px-4 flex flex-col items-center relative overflow-x-hidden">
       {/* Header */}
       <header className="pt-8 pb-6 text-center w-full max-w-md">
         <div className="flex justify-center mb-3">
@@ -101,9 +147,11 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="w-full max-w-md space-y-8">
+      <main className="w-full max-w-md space-y-8 relative">
         
-        {/* Upload Section */}
+        {/* Upload Section - Hide if we have a result (blurred or not) to save space, or keep it? 
+            Let's keep it but maybe minimize it or just keep the functionality. 
+            Actually, if result exists, we usually scroll to it. */}
         <div className="relative group">
           <input
             type="file"
@@ -118,6 +166,7 @@ export default function App() {
             className={`
               relative overflow-hidden rounded-3xl aspect-[3/4] shadow-xl transition-all duration-300 cursor-pointer
               ${!imagePreview ? 'bg-white border-2 border-dashed border-rose-300 hover:border-rose-400' : ''}
+              ${result && !isSubscribed ? 'blur-sm pointer-events-none' : ''} 
             `}
           >
             {imagePreview ? (
@@ -167,79 +216,91 @@ export default function App() {
 
         {/* Results Section */}
         {result && !loading && (
-          <div className="space-y-6 animate-fade-in">
-            
-            {/* Color Analysis Card */}
-            <ResultCard 
-              title="Твой Цветотип" 
-              icon={<Palette className="w-5 h-5" />}
-              delay={100}
-            >
-              <div className="mb-4">
-                <span className="block text-2xl font-serif text-rose-900 mb-2">{result.season}</span>
-                <p className="text-stone-600 text-sm leading-relaxed">{result.description}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
-                  <div className="flex gap-3 mt-2">
-                    {result.bestColors.map((color, idx) => (
-                      <div key={idx} className="flex flex-col items-center gap-1 group">
-                        <div 
-                          className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="text-[10px] text-stone-400 font-mono">{color}</span>
-                      </div>
-                    ))}
+          <div className="relative">
+             {/* If not subscribed, blur the content and disable pointer events */}
+             <div className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}>
+                
+                {/* Color Analysis Card */}
+                <ResultCard 
+                  title="Твой Цветотип" 
+                  icon={<Palette className="w-5 h-5" />}
+                  delay={100}
+                >
+                  <div className="mb-4">
+                    <span className="block text-2xl font-serif text-rose-900 mb-2">{result.season}</span>
+                    <p className="text-stone-600 text-sm leading-relaxed">{result.description}</p>
                   </div>
-                </div>
 
-                <div>
-                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Лучше избегать</span>
-                  <div className="flex gap-3 mt-2">
-                    <div className="flex flex-col items-center gap-1 group">
-                      <div 
-                        className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
-                        style={{ backgroundColor: result.worstColor }}
-                      >
-                         <div className="absolute inset-0 flex items-center justify-center">
-                           <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
-                         </div>
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
+                      <div className="flex gap-3 mt-2">
+                        {result.bestColors.map((color, idx) => (
+                          <div key={idx} className="flex flex-col items-center gap-1 group">
+                            <div 
+                              className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
+                              style={{ backgroundColor: color }}
+                            />
+                            <span className="text-[10px] text-stone-400 font-mono">{color}</span>
+                          </div>
+                        ))}
                       </div>
-                      <span className="text-[10px] text-stone-400 font-mono">{result.worstColor}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Лучше избегать</span>
+                      <div className="flex gap-3 mt-2">
+                        <div className="flex flex-col items-center gap-1 group">
+                          <div 
+                            className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
+                            style={{ backgroundColor: result.worstColor }}
+                          >
+                             <div className="absolute inset-0 flex items-center justify-center">
+                               <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
+                             </div>
+                          </div>
+                          <span className="text-[10px] text-stone-400 font-mono">{result.worstColor}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </ResultCard>
+                </ResultCard>
 
-            {/* Face Yoga Card */}
-            <ResultCard 
-              title="Face Yoga на сегодня" 
-              icon={<Smile className="w-5 h-5" />}
-              delay={300}
-            >
-              <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
-                <h4 className="font-serif text-lg text-stone-800 mb-2">{result.yogaTitle}</h4>
-                <p className="text-stone-600 text-sm leading-relaxed">
-                  {result.yogaText}
-                </p>
-              </div>
-            </ResultCard>
+                {/* Face Yoga Card */}
+                <ResultCard 
+                  title="Face Yoga на сегодня" 
+                  icon={<Smile className="w-5 h-5" />}
+                  delay={300}
+                >
+                  <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
+                    <h4 className="font-serif text-lg text-stone-800 mb-2">{result.yogaTitle}</h4>
+                    <p className="text-stone-600 text-sm leading-relaxed">
+                      {result.yogaText}
+                    </p>
+                  </div>
+                </ResultCard>
 
-            <button 
-              onClick={() => {
-                setResult(null);
-                setImagePreview(null);
-                setError(null);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-              }}
-              className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
-            >
-              Загрузить другое фото
-            </button>
+                <button 
+                  onClick={() => {
+                    setResult(null);
+                    setImagePreview(null);
+                    setError(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
+                >
+                  Загрузить другое фото
+                </button>
+             </div>
+
+             {/* Subscription Modal Overlay */}
+             {!isSubscribed && (
+                 <SubscriptionModal 
+                    onCheck={() => checkSubscription(false)} 
+                    isChecking={isCheckingSub} 
+                    checkError={subCheckError} 
+                 />
+             )}
           </div>
         )}
       </main>
