@@ -1,5 +1,3 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
 // Predefined profiles for fallback scenarios (if AI fails or safety blocks)
 const FALLBACK_PROFILES = [
   {
@@ -64,109 +62,117 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Strip data URL prefix if present for Gemini inlineData
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.warn("API Key is missing on server");
+      throw new Error("API Key configuration error");
+    }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        parts: [
+    // Ensure image format for VseGPT/OpenAI (must contain data: prefix)
+    const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
+
+    // Use fetch to call VseGPT API directly
+    const response = await fetch("https://api.vsegpt.ru/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini", // Explicitly route to gpt-4o-mini via VseGPT
+        messages: [
           {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Data,
-            },
+            role: "system",
+            content: `You are a professional Stylist and Face Yoga instructor. 
+            Analyze the user's photo. 
+            1. Determine their color season (Spring, Summer, Autumn, Winter) based on skin tone, eyes, and hair.
+            2. Suggest 3 best clothing colors (hex codes) and 1 worst color.
+            3. Suggest 1 specific Face Yoga exercise with a creative title.
+            
+            Return ONLY valid JSON. Language: Russian.`
           },
           {
-            text: `Analyze color season (Winter/Spring/Summer/Autumn).
-            Output JSON:
-            {
-              "season": "Name",
-              "description": "Short description (Russian)",
-              "bestColors": ["#hex", "#hex", "#hex"],
-              "worstColor": "#hex",
-              "yogaTitle": "Creative Name (e.g. 'Сова', 'Рыбка')",
-              "yogaText": "Specific step-by-step instruction (Russian)"
-            }`
-          },
+            role: "user",
+            content: [
+              { 
+                type: "text", 
+                text: `Analyze this face. Strictly follow this JSON structure:
+                {
+                  "season": "String (e.g. 'Мягкое Лето')",
+                  "description": "String (Russian description of features)",
+                  "bestColors": ["#hex", "#hex", "#hex"],
+                  "worstColor": "#hex",
+                  "yogaTitle": "String (Exercise Name)",
+                  "yogaText": "String (Instructions)"
+                }`
+              },
+              {
+                type: "image_url",
+                image_url: { 
+                  url: imageUrl,
+                  detail: "low" // "low" is cheaper and usually sufficient for color analysis
+                }
+              }
+            ]
+          }
         ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            season: { type: Type.STRING },
-            description: { type: Type.STRING },
-            bestColors: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            worstColor: { type: Type.STRING },
-            yogaTitle: { type: Type.STRING },
-            yogaText: { type: Type.STRING },
-          },
-          required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
-        },
-      },
+        response_format: { type: "json_object" },
+        max_tokens: 800,
+        temperature: 0.6
+      })
     });
 
-    let jsonResponse: any = {};
-    if (response.text) {
-        jsonResponse = JSON.parse(response.text);
-    } else {
-        throw new Error("Empty response from AI");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`VseGPT API Error (${response.status}):`, errorText);
+      throw new Error(`VseGPT Service Error: ${response.status}`);
     }
 
-    // --- SMART FALLBACK SYSTEM ---
-    const isSeasonValid = jsonResponse.season && jsonResponse.season.length > 3;
-    const isColorsValid = Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length >= 1;
-
-    if (!isSeasonValid || !isColorsValid) {
-        // If we are here, something was wrong with the AI output
-        const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
-        
-        jsonResponse = {
-            season: jsonResponse.season || randomProfile.season,
-            description: jsonResponse.description || randomProfile.description,
-            bestColors: (Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length > 0) ? jsonResponse.bestColors : randomProfile.bestColors,
-            worstColor: jsonResponse.worstColor || randomProfile.worstColor,
-            yogaTitle: jsonResponse.yogaTitle || randomProfile.yogaTitle,
-            yogaText: jsonResponse.yogaText || randomProfile.yogaText,
-            isDemo: true
-        };
-        
-        if (!isSeasonValid) {
-             Object.assign(jsonResponse, randomProfile);
-             jsonResponse.isDemo = true;
-        }
-    }
-
-    // Ensure strictly string types for React safety
-    const safeString = (val: any, fallback: string) => (typeof val === 'string' ? val : fallback);
+    const data = await response.json();
     
-    jsonResponse.season = safeString(jsonResponse.season, "Мягкое Лето");
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error("Invalid VseGPT response structure:", data);
+      throw new Error("Invalid response from AI provider");
+    }
+
+    const content = data.choices[0].message.content;
+    let jsonResponse;
+    
+    try {
+      jsonResponse = JSON.parse(content);
+    } catch (e) {
+      console.error("JSON Parse Error:", content);
+      throw new Error("Failed to parse AI response");
+    }
+
+    // Validate essential fields
+    if (!jsonResponse.season || !jsonResponse.bestColors) {
+      throw new Error("Incomplete AI response");
+    }
+
+    // Sanitization
+    const safeString = (val: any, fallback: string) => (typeof val === 'string' ? val : fallback);
+    jsonResponse.season = safeString(jsonResponse.season, "Цветотип");
     jsonResponse.description = safeString(jsonResponse.description, "Анализ завершен.");
     jsonResponse.worstColor = safeString(jsonResponse.worstColor, "#000000");
     jsonResponse.yogaTitle = safeString(jsonResponse.yogaTitle, "Фейс-фитнес");
-    jsonResponse.yogaText = safeString(jsonResponse.yogaText, "Сделайте легкий массаж.");
-
+    jsonResponse.yogaText = safeString(jsonResponse.yogaText, "Выполните упражнение.");
+    
     if (!Array.isArray(jsonResponse.bestColors)) {
-        jsonResponse.bestColors = ["#E6E6FA", "#778899", "#BC8F8F"];
+       jsonResponse.bestColors = ["#CCCCCC", "#888888", "#444444"];
     }
 
+    // Success - return real data (isDemo is undefined/false)
     res.status(200).json(jsonResponse);
 
   } catch (error: any) {
-    console.error("API Execution Error:", error);
-    // If API totally fails (401, 500, network), use fallback BUT mark as Demo
+    console.error("API Handler Error:", error);
+    
+    // Use fallback profile and MARK AS DEMO
     const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
-    const fallbackResponse = {
-        ...randomProfile,
-        isDemo: true // Explicitly mark as demo so user knows money wasn't spent due to error
-    };
-    res.status(200).json(fallbackResponse);
+    res.status(200).json({
+      ...randomProfile,
+      isDemo: true // Signals frontend to show the "Demo/Test Mode" warning
+    });
   }
 }
