@@ -96,11 +96,11 @@ export default function App() {
           let width = img.width;
           let height = img.height;
           
-          // Cost Optimization:
-          // 350px is sufficient for color/season analysis and creates a very small payload (~15-20kb).
-          // This drastically reduces API token usage.
-          const MAX_WIDTH = 350; 
-          const MAX_HEIGHT = 350;
+          // Cost Optimization vs Quality Balance:
+          // 350px was too small causing AI errors. 
+          // 450px is a sweet spot: readable for AI, but still very cheap.
+          const MAX_WIDTH = 450; 
+          const MAX_HEIGHT = 450;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -118,8 +118,8 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG with 0.4 quality (High compression for cost saving)
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
+          // Compress to JPEG with 0.5 quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);
@@ -313,15 +313,20 @@ export default function App() {
               delay={100}
             >
               <div className="mb-4">
-                <span className="block text-2xl font-serif text-rose-900 mb-2">{result.season}</span>
-                <p className="text-stone-600 text-sm leading-relaxed">{result.description}</p>
+                <span className="block text-2xl font-serif text-rose-900 mb-2">
+                    {result.season || "Цветотип определен"}
+                </span>
+                <p className="text-stone-600 text-sm leading-relaxed">
+                    {result.description || "Анализ завершен."}
+                </p>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
                   <div className="flex gap-3 mt-2">
-                    {result.bestColors.map((color, idx) => (
+                    {/* CRITICAL FIX: Add optional chaining ?. and check for array to prevent white screen crash */}
+                    {Array.isArray(result.bestColors) && result.bestColors.map((color, idx) => (
                       <div key={idx} className="flex flex-col items-center gap-1 group">
                         <div 
                           className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
@@ -339,13 +344,14 @@ export default function App() {
                     <div className="flex flex-col items-center gap-1 group">
                       <div 
                         className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
-                        style={{ backgroundColor: result.worstColor }}
+                        // CRITICAL FIX: Fallback color if undefined
+                        style={{ backgroundColor: result.worstColor || '#000000' }}
                       >
                          <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
                          </div>
                       </div>
-                      <span className="text-[10px] text-stone-400 font-mono">{result.worstColor}</span>
+                      <span className="text-[10px] text-stone-400 font-mono">{result.worstColor || '#000000'}</span>
                     </div>
                   </div>
                 </div>
@@ -359,9 +365,11 @@ export default function App() {
               delay={300}
             >
               <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
-                <h4 className="font-serif text-lg text-stone-800 mb-2">{result.yogaTitle}</h4>
+                <h4 className="font-serif text-lg text-stone-800 mb-2">
+                    {result.yogaTitle || "Упражнение"}
+                </h4>
                 <p className="text-stone-600 text-sm leading-relaxed">
-                  {result.yogaText}
+                  {result.yogaText || "Выполните легкий массаж лица."}
                 </p>
               </div>
             </ResultCard>

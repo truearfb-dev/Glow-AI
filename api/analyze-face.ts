@@ -32,9 +32,7 @@ export default async function handler(req: any, res: any) {
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // Keeping openai/gpt-4o-mini as it is the most robust and error-free model for this task.
-    // The previous cost issue (2.7RUB) was due to large image size.
-    // We have now implemented client-side compression to 350px (very small payload).
+    // Using gpt-4o-mini is best for JSON structure reliability.
     const MODEL_ID = "openai/gpt-4o-mini"; 
 
     const apiKey = process.env.API_KEY;
@@ -51,7 +49,7 @@ export default async function handler(req: any, res: any) {
     3. Подобрать 3 идеальных цвета одежды (HEX коды) и 1 цвет, который старит/не подходит.
     4. Рекомендовать 1 эффективное упражнение фейс-фитнеса.
 
-    Верни ответ строго в формате JSON.`;
+    Верни ответ строго в формате JSON. Если не уверен в цвете, используй нейтральные.`;
 
     const response = await fetch(VSEGPT_API_URL, {
       method: "POST",
@@ -64,7 +62,7 @@ export default async function handler(req: any, res: any) {
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI Stylist. Output valid JSON."
+            content: "You are a helpful AI Stylist. Output valid JSON. Always include 'bestColors' array."
           },
           {
             role: "user",
@@ -74,7 +72,7 @@ export default async function handler(req: any, res: any) {
                 type: "image_url",
                 image_url: {
                   url: imageUrl,
-                  detail: "low" // Force low detail mode to minimize tokens further
+                  detail: "low" // Keep cost low
                 }
               }
             ]
@@ -105,6 +103,22 @@ export default async function handler(req: any, res: any) {
         const cleanJson = content.replace(/```json\n?|```/g, '').trim();
         jsonResponse = JSON.parse(cleanJson);
     }
+
+    // --- DATA VALIDATION & FALLBACKS ---
+    // This prevents the "White Screen" on frontend by ensuring data structure is valid
+    if (!jsonResponse.season) jsonResponse.season = "Ваш цветотип";
+    if (!jsonResponse.description) jsonResponse.description = "Не удалось детально проанализировать фото, но мы подобрали универсальные рекомендации.";
+    
+    if (!jsonResponse.bestColors || !Array.isArray(jsonResponse.bestColors) || jsonResponse.bestColors.length === 0) {
+        // Universal flattering colors
+        jsonResponse.bestColors = ["#E6E6FA", "#000000", "#FFFFFF"]; 
+    }
+    
+    if (!jsonResponse.worstColor) jsonResponse.worstColor = "#8B4513"; // SaddleBrown often tricky
+    
+    if (!jsonResponse.yogaTitle) jsonResponse.yogaTitle = "Базовое расслабление";
+    if (!jsonResponse.yogaText) jsonResponse.yogaText = "Сделайте глубокий вдох, расслабьте челюсть и слегка помассируйте виски круговыми движениями.";
+    // -----------------------------------
 
     res.status(200).json(jsonResponse);
 
