@@ -15,9 +15,10 @@ interface ErrorBoundaryState {
 
 // Simple Error Boundary to catch "White Screen" crashes
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = { hasError: false, error: "" };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: "" };
   }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {

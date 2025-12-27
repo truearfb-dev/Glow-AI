@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Schema } from "@google/genai";
 
 // Predefined profiles for fallback scenarios (if AI fails or safety blocks)
 const FALLBACK_PROFILES = [
@@ -64,11 +64,27 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Extract base64 data cleanly for Gemini inlineData
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
+    // Clean base64 data
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+
+    const schema: Schema = {
+      type: Type.OBJECT,
+      properties: {
+        season: { type: Type.STRING },
+        description: { type: Type.STRING },
+        bestColors: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+        },
+        worstColor: { type: Type.STRING },
+        yogaTitle: { type: Type.STRING },
+        yogaText: { type: Type.STRING },
+      },
+      required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
+    };
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -81,65 +97,28 @@ export default async function handler(req: any, res: any) {
           },
           {
             text: `Analyze color season (Winter/Spring/Summer/Autumn).
-            Output JSON with fields: season, description, bestColors (array of hex), worstColor (hex), yogaTitle, yogaText.
-            Be concise. DO NOT suggest generic 'massage'. Suggest specific, named Face Yoga poses.
-            Language: Russian.`
+            Output JSON:
+            {
+              "season": "Name",
+              "description": "Short description (Russian)",
+              "bestColors": ["#hex", "#hex", "#hex"],
+              "worstColor": "#hex",
+              "yogaTitle": "Creative Name (e.g. 'Сова', 'Рыбка')",
+              "yogaText": "Specific step-by-step instruction (Russian)"
+            }`
           },
         ],
       },
       config: {
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            season: { type: Type.STRING },
-            description: { type: Type.STRING },
-            bestColors: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            worstColor: { type: Type.STRING },
-            yogaTitle: { type: Type.STRING },
-            yogaText: { type: Type.STRING },
-          },
-          required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
-        },
+        responseSchema: schema,
       },
     });
 
     const text = response.text;
-    let jsonResponse: any = {};
-    let parseSuccess = false;
+    if (!text) throw new Error("No output from AI");
 
-    try {
-        if (text) {
-            jsonResponse = JSON.parse(text);
-            parseSuccess = true;
-        }
-    } catch (e) {
-        console.error("JSON Parse Error, using fallback");
-    }
-
-    // --- SMART FALLBACK SYSTEM ---
-    const isSeasonValid = jsonResponse.season && jsonResponse.season.length > 3 && !jsonResponse.season.includes("Ваш");
-    const isColorsValid = Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length >= 1;
-
-    if (!parseSuccess || !isSeasonValid || !isColorsValid) {
-        const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
-        
-        jsonResponse = {
-            season: jsonResponse.season || randomProfile.season,
-            description: jsonResponse.description || randomProfile.description,
-            bestColors: (Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length > 0) ? jsonResponse.bestColors : randomProfile.bestColors,
-            worstColor: jsonResponse.worstColor || randomProfile.worstColor,
-            yogaTitle: jsonResponse.yogaTitle || randomProfile.yogaTitle,
-            yogaText: jsonResponse.yogaText || randomProfile.yogaText
-        };
-        
-        if (!isSeasonValid) {
-             Object.assign(jsonResponse, randomProfile);
-        }
-    }
+    const jsonResponse = JSON.parse(text);
 
     // Ensure strictly string types for React safety
     const safeString = (val: any, fallback: string) => (typeof val === 'string' ? val : fallback);
@@ -158,6 +137,8 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error:", error);
-    res.status(500).json({ error: "Service busy, please try again." });
+    // Fallback logic
+    const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
+    res.status(200).json(randomProfile);
   }
 }
