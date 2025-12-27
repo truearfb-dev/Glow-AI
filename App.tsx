@@ -95,8 +95,12 @@ export default function App() {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const MAX_WIDTH = 1024; // Limit width to 1024px
-          const MAX_HEIGHT = 1024;
+          
+          // Cost Optimization:
+          // Reduced from 1024 to 600.
+          // 600px is sufficient for color analysis but uses significantly fewer tokens.
+          const MAX_WIDTH = 600; 
+          const MAX_HEIGHT = 600;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -114,8 +118,8 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG with 0.7 quality
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          // Compress to JPEG with 0.6 quality (Standard web quality, lighter payload)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);

@@ -33,8 +33,9 @@ export default async function handler(req: any, res: any) {
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // Use "gpt-4o-mini" directly without provider prefix for better compatibility
-    const MODEL_ID = "gpt-4o-mini"; 
+    // Switch to google/gemini-1.5-flash
+    // This is significantly cheaper (5-10x) than GPT-4o-mini and supports vision excellent.
+    const MODEL_ID = "google/gemini-1.5-flash"; 
 
     const apiKey = process.env.API_KEY;
 
@@ -88,7 +89,7 @@ export default async function handler(req: any, res: any) {
           }
         ],
         temperature: 0.5,
-        max_tokens: 1500,
+        max_tokens: 1000, // Reduced max tokens to save cost on output as well
         response_format: { type: "json_object" }
       })
     });
@@ -96,7 +97,6 @@ export default async function handler(req: any, res: any) {
     if (!response.ok) {
         const errorData = await response.text();
         console.error("VseGPT Error Response:", errorData);
-        // Log specifically if it is a 400 to help debugging
         if (response.status === 400) {
            console.error("400 Bad Request details:", errorData);
         }
