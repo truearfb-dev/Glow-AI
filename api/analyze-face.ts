@@ -31,8 +31,6 @@ export default async function handler(req: any, res: any) {
 
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
-    
-    // Using gpt-4o-mini is best for JSON structure reliability.
     const MODEL_ID = "openai/gpt-4o-mini"; 
 
     const apiKey = process.env.API_KEY;
@@ -104,22 +102,27 @@ export default async function handler(req: any, res: any) {
         jsonResponse = JSON.parse(cleanJson);
     }
 
-    // --- DATA VALIDATION & FALLBACKS ---
-    // This prevents the "White Screen" on frontend by ensuring data structure is valid
-    if (!jsonResponse.season) jsonResponse.season = "Ваш цветотип";
-    if (!jsonResponse.description) jsonResponse.description = "Не удалось детально проанализировать фото, но мы подобрали универсальные рекомендации.";
-    
-    if (!jsonResponse.bestColors || !Array.isArray(jsonResponse.bestColors) || jsonResponse.bestColors.length === 0) {
-        // Universal flattering colors
-        jsonResponse.bestColors = ["#E6E6FA", "#000000", "#FFFFFF"]; 
-    }
-    
-    if (!jsonResponse.worstColor) jsonResponse.worstColor = "#8B4513"; // SaddleBrown often tricky
-    
-    if (!jsonResponse.yogaTitle) jsonResponse.yogaTitle = "Базовое расслабление";
-    if (!jsonResponse.yogaText) jsonResponse.yogaText = "Сделайте глубокий вдох, расслабьте челюсть и слегка помассируйте виски круговыми движениями.";
-    // -----------------------------------
+    // --- STRICT TYPE SANITIZATION ---
+    // Force everything to String to prevent React crashes on frontend
+    const safeString = (val: any, fallback: string) => {
+        if (typeof val === 'string') return val;
+        if (val && typeof val === 'object') return JSON.stringify(val).substring(0, 100); // Fallback for weird objects
+        return fallback;
+    };
 
+    jsonResponse.season = safeString(jsonResponse.season, "Ваш цветотип");
+    jsonResponse.description = safeString(jsonResponse.description, "Анализ завершен успешно.");
+    jsonResponse.worstColor = safeString(jsonResponse.worstColor, "#8B4513");
+    jsonResponse.yogaTitle = safeString(jsonResponse.yogaTitle, "Упражнение");
+    jsonResponse.yogaText = safeString(jsonResponse.yogaText, "Выполните легкий массаж лица.");
+
+    if (Array.isArray(jsonResponse.bestColors)) {
+        jsonResponse.bestColors = jsonResponse.bestColors.map((c: any) => safeString(c, "#E6E6FA"));
+    } else {
+        jsonResponse.bestColors = ["#E6E6FA", "#000000", "#FFFFFF"];
+    }
+
+    // Final Valid Structure Response
     res.status(200).json(jsonResponse);
 
   } catch (error: any) {

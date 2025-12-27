@@ -4,7 +4,61 @@ import { ResultCard } from './components/ResultCard';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { AnalysisResult } from './types';
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: string;
+}
+
+// Simple Error Boundary to catch "White Screen" crashes
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { hasError: true, error: error.toString() };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-rose-50 text-center">
+          <Info className="w-12 h-12 text-rose-500 mb-4" />
+          <h2 className="text-xl font-bold text-stone-800 mb-2">Произошла ошибка</h2>
+          <p className="text-sm text-stone-600 mb-6 bg-white p-3 rounded-lg border border-rose-100 break-words max-w-full">
+            {this.state.error}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-rose-500 text-white rounded-xl font-medium shadow-lg active:scale-95 transition-transform"
+          >
+            Перезагрузить
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -36,14 +90,10 @@ export default function App() {
   // Auto-scroll to results when ready and subscribed
   useEffect(() => {
     if (result && isSubscribed && !loading && resultsRef.current) {
-        // Ensure we start at the top so the user sees the photo + arrow
         window.scrollTo({ top: 0, behavior: 'smooth' });
-
-        // Delay the scroll significantly so user sees the "Result below" hint
         const timer = setTimeout(() => {
             resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 2000); 
-
         return () => clearTimeout(timer);
     }
   }, [result, isSubscribed, loading]);
@@ -96,9 +146,7 @@ export default function App() {
           let width = img.width;
           let height = img.height;
           
-          // Cost Optimization vs Quality Balance:
-          // 350px was too small causing AI errors. 
-          // 450px is a sweet spot: readable for AI, but still very cheap.
+          // Using 450px as optimal balance for gpt-4o-mini low-detail mode
           const MAX_WIDTH = 450; 
           const MAX_HEIGHT = 450;
 
@@ -118,7 +166,6 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG with 0.5 quality
           const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           resolve(dataUrl);
         };
@@ -136,7 +183,7 @@ export default function App() {
     setResult(null);
 
     try {
-        setLoading(true); // Show loading immediately during compression
+        setLoading(true);
         const compressedBase64 = await compressImage(file);
         setImagePreview(compressedBase64);
         processImage(compressedBase64);
@@ -152,7 +199,6 @@ export default function App() {
     setError(null);
     
     try {
-      // Sending request to Vercel Serverless Function
       const response = await fetch('/api/analyze-face', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,6 +219,11 @@ export default function App() {
             errorMsg = 'Произошла ошибка при обработке.';
         }
         throw new Error(errorMsg);
+      }
+      
+      // Safety check before setting state
+      if (!data || typeof data !== 'object') {
+          throw new Error("Invalid response format from AI");
       }
       
       setResult(data as AnalysisResult);
@@ -247,14 +298,12 @@ export default function App() {
                 />
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                 
-                {/* Camera Icon - Only show when NOT showing the scroll hint to avoid clutter */}
                 {!(result && isSubscribed) && (
                     <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-full shadow-lg">
                     <Camera className="w-5 h-5 text-stone-700" />
                     </div>
                 )}
                 
-                {/* Scroll Hint Overlay */}
                 {result && isSubscribed && (
                     <div className="absolute inset-x-0 bottom-0 pb-6 pt-12 bg-gradient-to-t from-black/50 to-transparent flex justify-center items-end pointer-events-none animate-fade-in">
                         <div className="flex flex-col items-center gap-2 animate-bounce">
@@ -276,7 +325,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Scanning Overlay */}
             {loading && (
               <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
                 <div className="relative">
@@ -313,11 +361,12 @@ export default function App() {
               delay={100}
             >
               <div className="mb-4">
+                {/* SAFE RENDER: Ensure primitives are used */}
                 <span className="block text-2xl font-serif text-rose-900 mb-2">
-                    {result.season || "Цветотип определен"}
+                    {String(result.season || "Цветотип определен")}
                 </span>
                 <p className="text-stone-600 text-sm leading-relaxed">
-                    {result.description || "Анализ завершен."}
+                    {String(result.description || "Анализ завершен.")}
                 </p>
               </div>
 
@@ -325,16 +374,19 @@ export default function App() {
                 <div>
                   <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Идеальные оттенки</span>
                   <div className="flex gap-3 mt-2">
-                    {/* CRITICAL FIX: Add optional chaining ?. and check for array to prevent white screen crash */}
-                    {Array.isArray(result.bestColors) && result.bestColors.map((color, idx) => (
-                      <div key={idx} className="flex flex-col items-center gap-1 group">
-                        <div 
-                          className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="text-[10px] text-stone-400 font-mono">{color}</span>
-                      </div>
-                    ))}
+                    {/* SAFE RENDER: Validate array and item types */}
+                    {Array.isArray(result.bestColors) && result.bestColors.map((color, idx) => {
+                      const safeColor = typeof color === 'string' ? color : '#000000';
+                      return (
+                        <div key={idx} className="flex flex-col items-center gap-1 group">
+                            <div 
+                            className="w-12 h-12 rounded-full shadow-md ring-2 ring-white transition-transform transform group-hover:-translate-y-1"
+                            style={{ backgroundColor: safeColor }}
+                            />
+                            <span className="text-[10px] text-stone-400 font-mono">{safeColor}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -344,14 +396,13 @@ export default function App() {
                     <div className="flex flex-col items-center gap-1 group">
                       <div 
                         className="w-12 h-12 rounded-full shadow-md ring-2 ring-white opacity-90 relative overflow-hidden"
-                        // CRITICAL FIX: Fallback color if undefined
-                        style={{ backgroundColor: result.worstColor || '#000000' }}
+                        style={{ backgroundColor: String(result.worstColor || '#000000') }}
                       >
                          <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-full h-[1px] bg-stone-500/50 rotate-45 transform"></div>
                          </div>
                       </div>
-                      <span className="text-[10px] text-stone-400 font-mono">{result.worstColor || '#000000'}</span>
+                      <span className="text-[10px] text-stone-400 font-mono">{String(result.worstColor || '#000000')}</span>
                     </div>
                   </div>
                 </div>
@@ -366,10 +417,10 @@ export default function App() {
             >
               <div className="bg-rose-50/50 rounded-xl p-4 border border-rose-100">
                 <h4 className="font-serif text-lg text-stone-800 mb-2">
-                    {result.yogaTitle || "Упражнение"}
+                    {String(result.yogaTitle || "Упражнение")}
                 </h4>
                 <p className="text-stone-600 text-sm leading-relaxed">
-                  {result.yogaText || "Выполните легкий массаж лица."}
+                  {String(result.yogaText || "Выполните легкий массаж лица.")}
                 </p>
               </div>
             </ResultCard>
@@ -380,7 +431,6 @@ export default function App() {
                 setImagePreview(null);
                 setError(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
-                // Scroll back to top
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               className="w-full py-4 text-center text-rose-600 font-medium hover:text-rose-700 transition-colors text-sm"
@@ -390,7 +440,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Subscription Modal Overlay - Moved out to be on top of everything */}
+        {/* Subscription Modal Overlay */}
         {result && !loading && !isSubscribed && (
              <SubscriptionModal 
                 onCheck={() => checkSubscription(false)} 
