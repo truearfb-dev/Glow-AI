@@ -1,38 +1,3 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
-
-// Definition of the Response Schema for the AI
-const analysisSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    season: {
-      type: Type.STRING,
-      description: "Color season type (e.g. Winter, Spring) in Russian",
-    },
-    description: {
-      type: Type.STRING,
-      description: "Explanation of why this season fits, in Russian",
-    },
-    bestColors: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "3 HEX color codes ideally matching the user",
-    },
-    worstColor: {
-      type: Type.STRING,
-      description: "1 HEX color code that should be avoided",
-    },
-    yogaTitle: {
-      type: Type.STRING,
-      description: "Title of the face yoga exercise in Russian",
-    },
-    yogaText: {
-      type: Type.STRING,
-      description: "Instruction for the exercise in Russian",
-    },
-  },
-  required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
-};
-
 export default async function handler(req: any, res: any) {
   // Config CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -61,51 +26,94 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Extract base64 data (remove header if present)
-    const base64Data = image.split(',')[1] || image;
+    // Ensure image has the data prefix for OpenAI compatible API
+    // VseGPT expects: "data:image/jpeg;base64,{BASE64_CODE}"
+    const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // VseGPT API Configuration
+    const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // User requested gemini-3-flash-preview.
-    // Since we are running on Vercel US region (iad1), this model should be available.
-    const modelId = "gemini-3-flash-preview";
+    // Switch to GPT-4o-mini
+    // It is the best price/performance model with Vision support currently available.
+    // Significantly cheaper than GPT-4o but sufficient for style analysis.
+    const MODEL_ID = "openai/gpt-4o-mini"; 
 
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
+    const apiKey = process.env.API_KEY;
+
+    if (!apiKey) {
+        throw new Error("API Key is missing on server. Please add API_KEY to Vercel Environment Variables.");
+    }
+
+    const promptText = `Ты профессиональный стилист и эксперт по фейс-йоге. Проанализируй фото пользователя.
+    
+    Твоя задача:
+    1. Определить цветотип (Зима/Весна/Лето/Осень) и подтип (например, Мягкое Лето).
+    2. Дать краткое, но емкое описание особенностей внешности.
+    3. Подобрать 3 идеальных цвета одежды (HEX коды) и 1 цвет, который старит/не подходит.
+    4. Рекомендовать 1 эффективное упражнение фейс-фитнеса, исходя из видимых особенностей лица (например, если есть носогубки - упражнение от них, если опущены веки - для глаз).
+
+    Верни ответ строго в формате JSON.
+    Структура:
+    {
+      "season": "Название цветотипа",
+      "description": "Текст описания...",
+      "bestColors": ["#HEX1", "#HEX2", "#HEX3"],
+      "worstColor": "#HEX",
+      "yogaTitle": "Название упражнения",
+      "yogaText": "Инструкция по выполнению..."
+    }`;
+
+    const response = await fetch(VSEGPT_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: MODEL_ID,
+        messages: [
           {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Data,
-            },
+            role: "system",
+            content: "You are a helpful AI Stylist that outputs JSON."
           },
           {
-            text: `Проанализируй это лицо.
-            1. Определи цветотип внешности (Зима/Весна/Лето/Осень) на основе тона кожи, глаз и волос.
-            2. Подбери 3 идеальных цвета одежды и 1 цвет, который старит.
-            3. Дай 1 простое упражнение фейс-фитнеса (Face Yoga), подходящее для этого типа лица.
-            
-            Верни ответ строго на русском языке в формате JSON.`
-          },
+            role: "user",
+            content: [
+              { type: "text", text: promptText },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageUrl
+                }
+              }
+            ]
+          }
         ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: analysisSchema,
-        temperature: 0.4,
-      },
+        temperature: 0.5,
+        max_tokens: 1500,
+        response_format: { type: "json_object" } // Enforce JSON mode for reliability
+      })
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
+    if (!response.ok) {
+        const errorData = await response.text();
+        console.error("VseGPT Error:", errorData);
+        throw new Error(`Provider Error: ${response.status}`);
+    }
 
-    // Try to parse the text as JSON to ensure it's valid before sending
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) throw new Error("No content received from AI");
+
     let jsonResponse;
     try {
-        jsonResponse = JSON.parse(text);
+        jsonResponse = JSON.parse(content);
     } catch (e) {
-        throw new Error("Invalid JSON response from model");
+        console.error("JSON Parse Error:", content);
+        // Fallback cleanup if JSON mode fails or adds extra text
+        const cleanJson = content.replace(/```json\n?|```/g, '').trim();
+        jsonResponse = JSON.parse(cleanJson);
     }
 
     res.status(200).json(jsonResponse);
@@ -113,15 +121,13 @@ export default async function handler(req: any, res: any) {
   } catch (error: any) {
     console.error("API Error:", error);
     
-    // Sanitize error message for the client
     let errorMessage = "Internal Server Error";
     
     if (error.message) {
-        if (error.message.includes("quota") || error.message.includes("429")) {
-            errorMessage = "AI Quota Exceeded";
+        if (error.message.includes("429") || error.message.includes("quota") || error.message.includes("balance")) {
+            errorMessage = "Сервис перегружен или закончился баланс API.";
         } else {
-            // Keep error short to prevent UI overflow
-            errorMessage = error.message.length > 50 ? "AI Processing Error" : error.message;
+            errorMessage = error.message.length > 100 ? "AI Processing Error" : error.message;
         }
     }
     
