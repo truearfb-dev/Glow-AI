@@ -1,3 +1,5 @@
+import { GoogleGenAI, Type } from "@google/genai";
+
 // Predefined profiles for fallback scenarios (if AI fails or safety blocks)
 const FALLBACK_PROFILES = [
   {
@@ -62,74 +64,56 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
-    const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
-    const MODEL_ID = "openai/gpt-4o-mini"; 
-    const apiKey = process.env.API_KEY;
+    // Extract base64 data cleanly for Gemini inlineData
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
-    if (!apiKey) {
-        throw new Error("API Key missing");
-    }
-
-    // Shortened, strict prompt to save tokens and avoid vague answers
-    const promptText = `Analyze color season (Winter/Spring/Summer/Autumn).
-    Output JSON:
-    {
-      "season": "Name",
-      "description": "Short description (Russian)",
-      "bestColors": ["#hex", "#hex", "#hex"],
-      "worstColor": "#hex",
-      "yogaTitle": "Exercise Name (Russian)",
-      "yogaText": "Instruction (Russian)"
-    }`;
-
-    const response = await fetch(VSEGPT_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: MODEL_ID,
-        messages: [
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
           {
-            role: "system",
-            content: "You are a Stylist AI. Be concise. Always return valid JSON."
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Data,
+            },
           },
           {
-            role: "user",
-            content: [
-              { type: "text", text: promptText },
-              {
-                type: "image_url",
-                image_url: {
-                  url: imageUrl,
-                  detail: "low" 
-                }
-              }
-            ]
-          }
+            text: `Analyze color season (Winter/Spring/Summer/Autumn).
+            Output JSON with fields: season, description, bestColors (array of hex), worstColor (hex), yogaTitle, yogaText.
+            Be concise. DO NOT suggest generic 'massage'. Suggest specific, named Face Yoga poses.
+            Language: Russian.`
+          },
         ],
-        temperature: 0.6,
-        max_tokens: 400, // Reduced from 1000 to save cost
-        response_format: { type: "json_object" }
-      })
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            season: { type: Type.STRING },
+            description: { type: Type.STRING },
+            bestColors: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            worstColor: { type: Type.STRING },
+            yogaTitle: { type: Type.STRING },
+            yogaText: { type: Type.STRING },
+          },
+          required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
+        },
+      },
     });
 
-    if (!response.ok) {
-        throw new Error(`Provider Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
+    const text = response.text;
     let jsonResponse: any = {};
     let parseSuccess = false;
 
     try {
-        if (content) {
-            const cleanJson = content.replace(/```json\n?|```/g, '').trim();
-            jsonResponse = JSON.parse(cleanJson);
+        if (text) {
+            jsonResponse = JSON.parse(text);
             parseSuccess = true;
         }
     } catch (e) {
@@ -137,18 +121,12 @@ export default async function handler(req: any, res: any) {
     }
 
     // --- SMART FALLBACK SYSTEM ---
-    // If AI failed to detect season or returned garbage, use a random realistic profile
-    // instead of showing "Ваш цветотип" or empty fields.
-    
-    // Check if critical fields are present and look valid
     const isSeasonValid = jsonResponse.season && jsonResponse.season.length > 3 && !jsonResponse.season.includes("Ваш");
     const isColorsValid = Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length >= 1;
 
     if (!parseSuccess || !isSeasonValid || !isColorsValid) {
-        // Pick a random fallback profile
         const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
         
-        // Merge AI data with fallback (prefer AI if available, else fallback)
         jsonResponse = {
             season: jsonResponse.season || randomProfile.season,
             description: jsonResponse.description || randomProfile.description,
@@ -158,8 +136,6 @@ export default async function handler(req: any, res: any) {
             yogaText: jsonResponse.yogaText || randomProfile.yogaText
         };
         
-        // If the AI gave a season name but no colors, try to match colors from known profiles? 
-        // For simplicity, if structure is broken, we just use the random profile completely to ensure UI looks good.
         if (!isSeasonValid) {
              Object.assign(jsonResponse, randomProfile);
         }
@@ -182,8 +158,6 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error:", error);
-    // Even on 500 error, we could technically return a fallback to keep the app working,
-    // but better to let the frontend handle the error state or retry.
     res.status(500).json({ error: "Service busy, please try again." });
   }
 }

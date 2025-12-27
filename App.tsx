@@ -15,7 +15,10 @@ interface ErrorBoundaryState {
 
 // Simple Error Boundary to catch "White Screen" crashes
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false, error: "" };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true, error: error.toString() };
@@ -143,9 +146,10 @@ function AppContent() {
           let width = img.width;
           let height = img.height;
           
-          // 450px is the sweet spot for OpenAI low-detail cost optimization.
-          const MAX_WIDTH = 450; 
-          const MAX_HEIGHT = 450;
+          // Reduced from 450 to 350 to save traffic and processing time.
+          // 350px is sufficient for color analysis.
+          const MAX_WIDTH = 350; 
+          const MAX_HEIGHT = 350;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -163,9 +167,8 @@ function AppContent() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Quality 0.6 - slightly better than 0.5 to help AI accuracy, 
-          // still compressed enough to be fast.
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          // Quality 0.5 is good balance for speed/AI readability
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);
