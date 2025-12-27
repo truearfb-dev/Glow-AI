@@ -33,10 +33,8 @@ export default async function handler(req: any, res: any) {
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // Switch to GPT-4o-mini
-    // It is the best price/performance model with Vision support currently available.
-    // Significantly cheaper than GPT-4o but sufficient for style analysis.
-    const MODEL_ID = "openai/gpt-4o-mini"; 
+    // Use "gpt-4o-mini" directly without provider prefix for better compatibility
+    const MODEL_ID = "gpt-4o-mini"; 
 
     const apiKey = process.env.API_KEY;
 
@@ -91,14 +89,18 @@ export default async function handler(req: any, res: any) {
         ],
         temperature: 0.5,
         max_tokens: 1500,
-        response_format: { type: "json_object" } // Enforce JSON mode for reliability
+        response_format: { type: "json_object" }
       })
     });
 
     if (!response.ok) {
         const errorData = await response.text();
-        console.error("VseGPT Error:", errorData);
-        throw new Error(`Provider Error: ${response.status}`);
+        console.error("VseGPT Error Response:", errorData);
+        // Log specifically if it is a 400 to help debugging
+        if (response.status === 400) {
+           console.error("400 Bad Request details:", errorData);
+        }
+        throw new Error(`Provider Error: ${response.status} - ${errorData.substring(0, 200)}`);
     }
 
     const data = await response.json();
@@ -111,7 +113,6 @@ export default async function handler(req: any, res: any) {
         jsonResponse = JSON.parse(content);
     } catch (e) {
         console.error("JSON Parse Error:", content);
-        // Fallback cleanup if JSON mode fails or adds extra text
         const cleanJson = content.replace(/```json\n?|```/g, '').trim();
         jsonResponse = JSON.parse(cleanJson);
     }
@@ -119,15 +120,17 @@ export default async function handler(req: any, res: any) {
     res.status(200).json(jsonResponse);
 
   } catch (error: any) {
-    console.error("API Error:", error);
+    console.error("API Error Full:", error);
     
     let errorMessage = "Internal Server Error";
     
     if (error.message) {
         if (error.message.includes("429") || error.message.includes("quota") || error.message.includes("balance")) {
             errorMessage = "Сервис перегружен или закончился баланс API.";
+        } else if (error.message.includes("400")) {
+            errorMessage = "Ошибка формата данных (400). Возможно, фото повреждено.";
         } else {
-            errorMessage = error.message.length > 100 ? "AI Processing Error" : error.message;
+            errorMessage = error.message.length > 200 ? "AI Processing Error" : error.message;
         }
     }
     
