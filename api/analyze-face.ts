@@ -32,8 +32,9 @@ export default async function handler(req: any, res: any) {
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // Returning to openai/gpt-4o-mini as it is more stable with vision+JSON than the Gemini wrapper.
-    // The cost issue is solved by the client-side image compression (600px) which reduces token usage by 98%.
+    // Keeping openai/gpt-4o-mini as it is the most robust and error-free model for this task.
+    // The previous cost issue (2.7RUB) was due to large image size.
+    // We have now implemented client-side compression to 350px (very small payload).
     const MODEL_ID = "openai/gpt-4o-mini"; 
 
     const apiKey = process.env.API_KEY;
@@ -73,7 +74,7 @@ export default async function handler(req: any, res: any) {
                 type: "image_url",
                 image_url: {
                   url: imageUrl,
-                  detail: "auto" // Auto mode with 600px image uses minimal tokens (~255-500)
+                  detail: "low" // Force low detail mode to minimize tokens further
                 }
               }
             ]
@@ -81,7 +82,7 @@ export default async function handler(req: any, res: any) {
         ],
         temperature: 0.5,
         max_tokens: 1000,
-        response_format: { type: "json_object" } // Safe to use with gpt-4o-mini
+        response_format: { type: "json_object" }
       })
     });
 

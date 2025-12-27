@@ -97,9 +97,10 @@ export default function App() {
           let height = img.height;
           
           // Cost Optimization:
-          // 600px is sufficient for color analysis but uses significantly fewer tokens.
-          const MAX_WIDTH = 600; 
-          const MAX_HEIGHT = 600;
+          // 350px is sufficient for color/season analysis and creates a very small payload (~15-20kb).
+          // This drastically reduces API token usage.
+          const MAX_WIDTH = 350; 
+          const MAX_HEIGHT = 350;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -117,8 +118,8 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG with 0.5 quality (Aggressive compression for cost saving)
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          // Compress to JPEG with 0.4 quality (High compression for cost saving)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
           resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);
@@ -182,7 +183,7 @@ export default function App() {
       
       if (err.message) {
          if (err.message.includes("400")) {
-             displayError = "Ошибка соединения (400). Попробуйте позже.";
+             displayError = "Ошибка фото (400). Попробуйте другое изображение.";
          } else if (err.message.length > 100) {
              displayError = "Ошибка сервера. Попробуйте позже.";
          } else {
