@@ -26,15 +26,15 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Ensure image has the data prefix for OpenAI compatible API
-    // VseGPT expects: "data:image/jpeg;base64,{BASE64_CODE}"
+    // Ensure image has the data prefix
     const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
 
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // google/gemini-1.5-flash is the most cost-effective solution
-    const MODEL_ID = "google/gemini-1.5-flash"; 
+    // Returning to openai/gpt-4o-mini as it is more stable with vision+JSON than the Gemini wrapper.
+    // The cost issue is solved by the client-side image compression (600px) which reduces token usage by 98%.
+    const MODEL_ID = "openai/gpt-4o-mini"; 
 
     const apiKey = process.env.API_KEY;
 
@@ -42,27 +42,15 @@ export default async function handler(req: any, res: any) {
         throw new Error("API Key is missing on server. Please add API_KEY to Vercel Environment Variables.");
     }
 
-    // Updated Prompt: Removed reliance on system prompt for JSON enforcement
-    // Added specific instruction to avoid Markdown formatting
     const promptText = `Ты профессиональный стилист и эксперт по фейс-йоге. Проанализируй фото пользователя.
     
     Твоя задача:
     1. Определить цветотип (Зима/Весна/Лето/Осень) и подтип (например, Мягкое Лето).
     2. Дать краткое, но емкое описание особенностей внешности.
     3. Подобрать 3 идеальных цвета одежды (HEX коды) и 1 цвет, который старит/не подходит.
-    4. Рекомендовать 1 эффективное упражнение фейс-фитнеса, исходя из видимых особенностей лица (например, если есть носогубки - упражнение от них, если опущены веки - для глаз).
+    4. Рекомендовать 1 эффективное упражнение фейс-фитнеса.
 
-    ВАЖНО: Верни ответ ТОЛЬКО в формате JSON. Не используй markdown блоки ('''json). Не пиши никакого лишнего текста.
-    
-    Структура JSON:
-    {
-      "season": "Название цветотипа",
-      "description": "Текст описания...",
-      "bestColors": ["#HEX1", "#HEX2", "#HEX3"],
-      "worstColor": "#HEX",
-      "yogaTitle": "Название упражнения",
-      "yogaText": "Инструкция по выполнению..."
-    }`;
+    Верни ответ строго в формате JSON.`;
 
     const response = await fetch(VSEGPT_API_URL, {
       method: "POST",
@@ -75,7 +63,7 @@ export default async function handler(req: any, res: any) {
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI Stylist. Output only valid JSON."
+            content: "You are a helpful AI Stylist. Output valid JSON."
           },
           {
             role: "user",
@@ -84,7 +72,8 @@ export default async function handler(req: any, res: any) {
               {
                 type: "image_url",
                 image_url: {
-                  url: imageUrl
+                  url: imageUrl,
+                  detail: "auto" // Auto mode with 600px image uses minimal tokens (~255-500)
                 }
               }
             ]
@@ -92,16 +81,13 @@ export default async function handler(req: any, res: any) {
         ],
         temperature: 0.5,
         max_tokens: 1000,
-        // REMOVED response_format: { type: "json_object" }
-        // Many providers (including VseGPT wrappers for Gemini) throw 400 Bad Request 
-        // when this OpenAI-specific flag is passed to non-OpenAI models.
+        response_format: { type: "json_object" } // Safe to use with gpt-4o-mini
       })
     });
 
     if (!response.ok) {
         const errorData = await response.text();
         console.error("VseGPT Error Response:", errorData);
-        // Pass the actual error detail to the client for better debugging if needed
         throw new Error(`Provider Error: ${response.status} - ${errorData.substring(0, 200)}`);
     }
 
@@ -112,22 +98,11 @@ export default async function handler(req: any, res: any) {
 
     let jsonResponse;
     try {
-        // Cleaning logic is still needed because models sometimes ignore "no markdown" instructions
-        const cleanJson = content.replace(/```json\n?|```/g, '').trim();
-        jsonResponse = JSON.parse(cleanJson);
+        jsonResponse = JSON.parse(content);
     } catch (e) {
         console.error("JSON Parse Error:", content);
-        // Last ditch effort: try to find JSON object if there is leading/trailing text
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            try {
-                jsonResponse = JSON.parse(jsonMatch[0]);
-            } catch (innerE) {
-                throw new Error("Failed to parse AI response");
-            }
-        } else {
-             throw new Error("Invalid JSON format from AI");
-        }
+        const cleanJson = content.replace(/```json\n?|```/g, '').trim();
+        jsonResponse = JSON.parse(cleanJson);
     }
 
     res.status(200).json(jsonResponse);
@@ -141,8 +116,7 @@ export default async function handler(req: any, res: any) {
         if (error.message.includes("429") || error.message.includes("quota") || error.message.includes("balance")) {
             errorMessage = "Сервис перегружен или закончился баланс API.";
         } else if (error.message.includes("400")) {
-            // Updated error message to be less confusing if it's a protocol error vs image error
-            errorMessage = "Ошибка обработки запроса (400). Попробуйте позже.";
+            errorMessage = "Ошибка формата данных (400).";
         } else {
             errorMessage = error.message.length > 200 ? "AI Processing Error" : error.message;
         }
