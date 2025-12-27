@@ -33,8 +33,7 @@ export default async function handler(req: any, res: any) {
     // VseGPT API Configuration
     const VSEGPT_API_URL = "https://api.vsegpt.ru/v1/chat/completions";
     
-    // Switch to google/gemini-1.5-flash
-    // This is significantly cheaper (5-10x) than GPT-4o-mini and supports vision excellent.
+    // google/gemini-1.5-flash is the most cost-effective solution
     const MODEL_ID = "google/gemini-1.5-flash"; 
 
     const apiKey = process.env.API_KEY;
@@ -43,6 +42,8 @@ export default async function handler(req: any, res: any) {
         throw new Error("API Key is missing on server. Please add API_KEY to Vercel Environment Variables.");
     }
 
+    // Updated Prompt: Removed reliance on system prompt for JSON enforcement
+    // Added specific instruction to avoid Markdown formatting
     const promptText = `Ты профессиональный стилист и эксперт по фейс-йоге. Проанализируй фото пользователя.
     
     Твоя задача:
@@ -51,8 +52,9 @@ export default async function handler(req: any, res: any) {
     3. Подобрать 3 идеальных цвета одежды (HEX коды) и 1 цвет, который старит/не подходит.
     4. Рекомендовать 1 эффективное упражнение фейс-фитнеса, исходя из видимых особенностей лица (например, если есть носогубки - упражнение от них, если опущены веки - для глаз).
 
-    Верни ответ строго в формате JSON.
-    Структура:
+    ВАЖНО: Верни ответ ТОЛЬКО в формате JSON. Не используй markdown блоки ('''json). Не пиши никакого лишнего текста.
+    
+    Структура JSON:
     {
       "season": "Название цветотипа",
       "description": "Текст описания...",
@@ -73,7 +75,7 @@ export default async function handler(req: any, res: any) {
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI Stylist that outputs JSON."
+            content: "You are a helpful AI Stylist. Output only valid JSON."
           },
           {
             role: "user",
@@ -89,17 +91,17 @@ export default async function handler(req: any, res: any) {
           }
         ],
         temperature: 0.5,
-        max_tokens: 1000, // Reduced max tokens to save cost on output as well
-        response_format: { type: "json_object" }
+        max_tokens: 1000,
+        // REMOVED response_format: { type: "json_object" }
+        // Many providers (including VseGPT wrappers for Gemini) throw 400 Bad Request 
+        // when this OpenAI-specific flag is passed to non-OpenAI models.
       })
     });
 
     if (!response.ok) {
         const errorData = await response.text();
         console.error("VseGPT Error Response:", errorData);
-        if (response.status === 400) {
-           console.error("400 Bad Request details:", errorData);
-        }
+        // Pass the actual error detail to the client for better debugging if needed
         throw new Error(`Provider Error: ${response.status} - ${errorData.substring(0, 200)}`);
     }
 
@@ -110,11 +112,22 @@ export default async function handler(req: any, res: any) {
 
     let jsonResponse;
     try {
-        jsonResponse = JSON.parse(content);
-    } catch (e) {
-        console.error("JSON Parse Error:", content);
+        // Cleaning logic is still needed because models sometimes ignore "no markdown" instructions
         const cleanJson = content.replace(/```json\n?|```/g, '').trim();
         jsonResponse = JSON.parse(cleanJson);
+    } catch (e) {
+        console.error("JSON Parse Error:", content);
+        // Last ditch effort: try to find JSON object if there is leading/trailing text
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                jsonResponse = JSON.parse(jsonMatch[0]);
+            } catch (innerE) {
+                throw new Error("Failed to parse AI response");
+            }
+        } else {
+             throw new Error("Invalid JSON format from AI");
+        }
     }
 
     res.status(200).json(jsonResponse);
@@ -128,7 +141,8 @@ export default async function handler(req: any, res: any) {
         if (error.message.includes("429") || error.message.includes("quota") || error.message.includes("balance")) {
             errorMessage = "Сервис перегружен или закончился баланс API.";
         } else if (error.message.includes("400")) {
-            errorMessage = "Ошибка формата данных (400). Возможно, фото повреждено.";
+            // Updated error message to be less confusing if it's a protocol error vs image error
+            errorMessage = "Ошибка обработки запроса (400). Попробуйте позже.";
         } else {
             errorMessage = error.message.length > 200 ? "AI Processing Error" : error.message;
         }
