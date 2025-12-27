@@ -5,7 +5,7 @@ import { SubscriptionModal } from './components/SubscriptionModal';
 import { AnalysisResult } from './types';
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -15,10 +15,7 @@ interface ErrorBoundaryState {
 
 // Simple Error Boundary to catch "White Screen" crashes
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: "" };
-  }
+  public state: ErrorBoundaryState = { hasError: false, error: "" };
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true, error: error.toString() };
@@ -146,7 +143,7 @@ function AppContent() {
           let width = img.width;
           let height = img.height;
           
-          // Using 450px as optimal balance for gpt-4o-mini low-detail mode
+          // 450px is the sweet spot for OpenAI low-detail cost optimization.
           const MAX_WIDTH = 450; 
           const MAX_HEIGHT = 450;
 
@@ -166,7 +163,9 @@ function AppContent() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          // Quality 0.6 - slightly better than 0.5 to help AI accuracy, 
+          // still compressed enough to be fast.
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);
