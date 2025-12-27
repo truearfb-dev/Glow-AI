@@ -5,6 +5,7 @@ export interface AnalysisResult {
   worstColor: string;
   yogaTitle: string;
   yogaText: string;
+  isDemo?: boolean;
 }
 
 export interface ApiError {

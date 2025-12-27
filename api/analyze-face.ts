@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Predefined profiles for fallback scenarios (if AI fails or safety blocks)
 const FALLBACK_PROFILES = [
@@ -64,27 +64,11 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // Clean base64 data
+    // Strip data URL prefix if present for Gemini inlineData
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
-    const schema: Schema = {
-      type: Type.OBJECT,
-      properties: {
-        season: { type: Type.STRING },
-        description: { type: Type.STRING },
-        bestColors: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-        },
-        worstColor: { type: Type.STRING },
-        yogaTitle: { type: Type.STRING },
-        yogaText: { type: Type.STRING },
-      },
-      required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
-    };
-
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -111,14 +95,54 @@ export default async function handler(req: any, res: any) {
       },
       config: {
         responseMimeType: "application/json",
-        responseSchema: schema,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            season: { type: Type.STRING },
+            description: { type: Type.STRING },
+            bestColors: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            worstColor: { type: Type.STRING },
+            yogaTitle: { type: Type.STRING },
+            yogaText: { type: Type.STRING },
+          },
+          required: ["season", "description", "bestColors", "worstColor", "yogaTitle", "yogaText"],
+        },
       },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No output from AI");
+    let jsonResponse: any = {};
+    if (response.text) {
+        jsonResponse = JSON.parse(response.text);
+    } else {
+        throw new Error("Empty response from AI");
+    }
 
-    const jsonResponse = JSON.parse(text);
+    // --- SMART FALLBACK SYSTEM ---
+    const isSeasonValid = jsonResponse.season && jsonResponse.season.length > 3;
+    const isColorsValid = Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length >= 1;
+
+    if (!isSeasonValid || !isColorsValid) {
+        // If we are here, something was wrong with the AI output
+        const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
+        
+        jsonResponse = {
+            season: jsonResponse.season || randomProfile.season,
+            description: jsonResponse.description || randomProfile.description,
+            bestColors: (Array.isArray(jsonResponse.bestColors) && jsonResponse.bestColors.length > 0) ? jsonResponse.bestColors : randomProfile.bestColors,
+            worstColor: jsonResponse.worstColor || randomProfile.worstColor,
+            yogaTitle: jsonResponse.yogaTitle || randomProfile.yogaTitle,
+            yogaText: jsonResponse.yogaText || randomProfile.yogaText,
+            isDemo: true
+        };
+        
+        if (!isSeasonValid) {
+             Object.assign(jsonResponse, randomProfile);
+             jsonResponse.isDemo = true;
+        }
+    }
 
     // Ensure strictly string types for React safety
     const safeString = (val: any, fallback: string) => (typeof val === 'string' ? val : fallback);
@@ -136,9 +160,13 @@ export default async function handler(req: any, res: any) {
     res.status(200).json(jsonResponse);
 
   } catch (error: any) {
-    console.error("API Error:", error);
-    // Fallback logic
+    console.error("API Execution Error:", error);
+    // If API totally fails (401, 500, network), use fallback BUT mark as Demo
     const randomProfile = FALLBACK_PROFILES[Math.floor(Math.random() * FALLBACK_PROFILES.length)];
-    res.status(200).json(randomProfile);
+    const fallbackResponse = {
+        ...randomProfile,
+        isDemo: true // Explicitly mark as demo so user knows money wasn't spent due to error
+    };
+    res.status(200).json(fallbackResponse);
   }
 }

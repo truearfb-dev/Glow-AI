@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info, ChevronDown } from 'lucide-react';
+import { Sparkles, Upload, Palette, Smile, Camera, Loader2, Info, ChevronDown, AlertTriangle } from 'lucide-react';
 import { ResultCard } from './components/ResultCard';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { AnalysisResult } from './types';
@@ -16,9 +16,11 @@ interface ErrorBoundaryState {
 // Simple Error Boundary to catch "White Screen" crashes
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false, error: "" };
+  public readonly props: Readonly<ErrorBoundaryProps>;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    this.props = props;
   }
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
@@ -356,6 +358,16 @@ function AppContent() {
             ref={resultsRef} 
             className={`space-y-6 transition-all duration-700 ${!isSubscribed ? 'blur-xl select-none pointer-events-none opacity-80' : 'animate-fade-in'}`}
           >
+            {/* DEMO / FALLBACK WARNING */}
+            {result.isDemo && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3 text-amber-800 text-sm animate-pulse">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                <div>
+                  <span className="font-bold block">Демо-режим (Тест)</span>
+                  <span className="text-xs opacity-90">API недоступен, показан пример результата. Проверьте баланс или ключ.</span>
+                </div>
+              </div>
+            )}
                 
             {/* Color Analysis Card */}
             <ResultCard 
